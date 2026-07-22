@@ -27,6 +27,8 @@
 # Set RUN_BASELINE=0 to skip the first plain vLLM+NIXL comparison pass.
 # Set STRICT_EXPECTED_SUBSTRING=0 or CLIENT_ENDPOINT=completions for lower-level
 # transport-only debugging where generated text quality is not the pass/fail.
+# Set CHECK_ONLY=1 to validate the harness configuration and local environment
+# without installing dependencies, checking CUDA, or starting vLLM servers.
 # kvcached+NIXL currently needs KVCACHED_NIXL_CONTIGUOUS_LAYOUT=false because
 # vLLM's NixlConnector assumes per-layer K/V block-contiguous regions.
 
@@ -61,6 +63,7 @@ INSTALL_DEPS="${INSTALL_DEPS:-1}"
 INSTALL_VLLM="${INSTALL_VLLM:-1}"
 RUN_UNIT_TESTS="${RUN_UNIT_TESTS:-1}"
 RUN_BASELINE="${RUN_BASELINE:-1}"
+CHECK_ONLY="${CHECK_ONLY:-0}"
 KVCACHED_NIXL_CONTIGUOUS_LAYOUT="${KVCACHED_NIXL_CONTIGUOUS_LAYOUT:-false}"
 VLLM_VERSION="${VLLM_VERSION:-0.10.2}"
 VLLM_BIN="${VLLM_BIN:-vllm}"
@@ -180,6 +183,54 @@ wait_for_server() {
     fi
     sleep 2
   done
+}
+
+require_positive_int() {
+  local name="$1"
+  local value="$2"
+  if ! [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
+    die "${name} must be a positive integer, got: ${value}"
+  fi
+}
+
+preflight_environment() {
+  log "Running preflight checks"
+
+  command -v python >/dev/null 2>&1 || die "python is required"
+  command -v curl >/dev/null 2>&1 || die "curl is required"
+  if ! command -v setsid >/dev/null 2>&1; then
+    if [[ "${CHECK_ONLY}" == "1" ]]; then
+      log "setsid not found; required for a full run, but CHECK_ONLY=1 is continuing"
+    else
+      die "setsid is required"
+    fi
+  fi
+
+  case "${CLIENT_ENDPOINT}" in
+    chat|completions) ;;
+    *) die "CLIENT_ENDPOINT must be 'chat' or 'completions', got: ${CLIENT_ENDPOINT}" ;;
+  esac
+
+  case "${KVCACHED_NIXL_CONTIGUOUS_LAYOUT}" in
+    false|False|FALSE|0) ;;
+    *) die "kvcached + NIXL requires KVCACHED_NIXL_CONTIGUOUS_LAYOUT=false" ;;
+  esac
+
+  require_positive_int MAX_MODEL_LEN "${MAX_MODEL_LEN}"
+  require_positive_int BLOCK_SIZE "${BLOCK_SIZE}"
+  require_positive_int NUM_REQUESTS "${NUM_REQUESTS}"
+  require_positive_int MAX_TOKENS "${MAX_TOKENS}"
+  require_positive_int MIN_REMOTE_BLOCKS "${MIN_REMOTE_BLOCKS}"
+  require_positive_int REQUEST_TIMEOUT "${REQUEST_TIMEOUT}"
+  require_positive_int WATCHDOG_INTERVAL "${WATCHDOG_INTERVAL}"
+
+  python - <<'PY'
+import importlib.util
+
+for name in ("pytest", "torch", "vllm", "nixl"):
+    status = "available" if importlib.util.find_spec(name) else "missing"
+    print(f"preflight_module_{name}={status}")
+PY
 }
 
 check_torch_cuda() {
@@ -722,9 +773,14 @@ main() {
   log "Run baseline first: ${RUN_BASELINE}"
   log "kvcached NIXL contiguous layout: ${KVCACHED_NIXL_CONTIGUOUS_LAYOUT}"
   log "vLLM logging level: ${VLLM_LOGGING_LEVEL}; NIXL log level: ${NIXL_LOG_LEVEL}"
+  log "Check-only mode: ${CHECK_ONLY}"
 
-  command -v curl >/dev/null 2>&1 || die "curl is required"
-  command -v setsid >/dev/null 2>&1 || die "setsid is required"
+  preflight_environment
+  if [[ "${CHECK_ONLY}" == "1" ]]; then
+    log "CHECK_ONLY=1; skipping dependency installation, CUDA validation, and server startup"
+    log "PASS"
+    return
+  fi
 
   check_torch_cuda || die "Torch/CUDA is not usable. Use the RunPod PyTorch 2.8.0 CUDA 12.8 template or fix the pod before running this test."
   install_vllm_stack

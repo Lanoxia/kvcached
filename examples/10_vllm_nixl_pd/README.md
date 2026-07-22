@@ -34,6 +34,13 @@ From the repository root:
 bash tools/run_vllm_nixl_pd_smoke.sh
 ```
 
+To validate the harness without installing dependencies, checking CUDA, or
+starting vLLM servers:
+
+```bash
+CHECK_ONLY=1 bash tools/run_vllm_nixl_pd_smoke.sh
+```
+
 Useful overrides:
 
 ```bash
@@ -72,6 +79,8 @@ that the layout/block-count reconciliation path ran.
 - kvcached + NIXL currently requires non-contiguous KV layout because vLLM's
   `NixlConnector` assumes each layer's K/V regions are block-contiguous.
   The smoke script defaults `KVCACHED_NIXL_CONTIGUOUS_LAYOUT=false`.
+- `CHECK_ONLY=1` validates the script configuration and prints the availability
+  of optional Python modules before a full GPU run.
 - Set `RUN_BASELINE=0` to skip the baseline pass while iterating on kvcached.
 - Set `STRICT_EXPECTED_SUBSTRING=0` or `CLIENT_ENDPOINT=completions` for
   lower-level transport debugging where generated text quality is not the
