@@ -112,3 +112,37 @@ def test_sweep_includes_pre_fix_failure_witness():
         "No config exercises the pre-fix failure mode; the alignment test would "
         "pass even without the fix. Add a (gpu_gb, num_layers) that yields an odd "
         "multiple of PAGE_SIZE for MLA.")
+
+
+@pytest.mark.parametrize("integration", INTEGRATIONS)
+def test_alloc_kv_cache_respects_gpu_utilization(monkeypatch, integration):
+    """KVCACHED_GPU_UTILIZATION should size the virtual KV pool.
+
+    The C++ page allocator already uses this value for physical pool pressure.
+    The integration layer must use the same limit when creating the per-layer
+    FTensors; otherwise a small smoke run still exposes a full-device virtual
+    region to downstream consumers such as NIXL.
+    """
+    mod = importlib.import_module(f"kvcached.integration.{integration}.interfaces")
+    gpu_mem_bytes = 80 * (1024 ** 3)
+    num_layers = 40
+    utilization = 0.25
+
+    monkeypatch.setattr(mod, "_kvcached_initialized", True, raising=False)
+    monkeypatch.setattr(mod, "GPU_UTILIZATION", utilization)
+    monkeypatch.setattr(torch.cuda, "get_device_properties",
+                        lambda dev=None: _FakeProps(gpu_mem_bytes))
+
+    def _fake_create_kv_tensors(size, *args, **kwargs):
+        raise _CapturedSize(size)
+
+    monkeypatch.setattr(mod, "create_kv_tensors", _fake_create_kv_tensors)
+
+    shape = _kvcache_shape(integration, "MHA")
+    with pytest.raises(_CapturedSize) as excinfo:
+        _call_alloc(mod, integration, "MHA", shape, num_layers)
+
+    per_layer_k_or_v = int(gpu_mem_bytes * utilization) // num_layers // 2
+    per_layer_k_or_v = (per_layer_k_or_v // PAGE_SIZE) * PAGE_SIZE
+    expected_ftensor_bytes = per_layer_k_or_v * 2
+    assert excinfo.value.size == expected_ftensor_bytes
