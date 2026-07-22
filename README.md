@@ -100,6 +100,8 @@ GPT-OSS support in SGLang updated to **v0.5.9**.
 </div>
 
 See concrete examples here: [kvcached/examples](https://github.com/ovg-project/kvcached/tree/main/examples).
+For vLLM prefill/decode disaggregation with NIXL, see
+[examples/10_vllm_nixl_pd](examples/10_vllm_nixl_pd).
 
 ## kvcached in action
 
