@@ -16,9 +16,16 @@ Rebased follow-up branches:
 
 ## Summary
 
-I set up a reproducible GPU validation environment for kvcached on a Tencent AnyDev machine with two NVIDIA H20 GPUs, built kvcached from source, installed the vLLM/NIXL stack, and ran end-to-end prefill/decode disaggregation smoke tests.
+I set up a reproducible Linux/CUDA validation environment for kvcached on two
+NVIDIA H20 GPUs, built kvcached from the public source repository, installed
+the public vLLM/NIXL stack, and ran end-to-end prefill/decode disaggregation
+smoke tests.
 
 The validation covers both the plain vLLM+NIXL baseline and the kvcached-enabled path. I also added a follow-up fix after the first GPU run revealed that the Python integration layer did not respect `KVCACHED_GPU_UTILIZATION` when sizing the virtual KV tensors.
+
+The implementation and reproduction procedure do not depend on a particular
+GPU provider, private scheduler, internal storage system, or organization-only
+service.
 
 ## Contributions Validated
 
@@ -31,7 +38,7 @@ The validation covers both the plain vLLM+NIXL baseline and the kvcached-enabled
 
 ## H20 Environment
 
-- Host: Tencent AnyDev GPU environment
+- Platform: Linux x86-64 CUDA GPU environment
 - GPU: 2 x NVIDIA H20
 - GPU memory: 97,871 MiB per GPU
 - Driver: 535.247.01
@@ -40,9 +47,8 @@ The validation covers both the plain vLLM+NIXL baseline and the kvcached-enabled
 - CUDA reported by PyTorch: 12.8
 - vLLM: 0.10.2
 - NIXL: 0.8.0 package installed
-- kvcached checkout: `/data/workspace/kvcached`
-- Virtual environment: `/data/workspace/kvcached-venv`
-- Compiler environment: `/data/workspace/kvcached-compiler`
+- Build: public kvcached checkout in an isolated Python environment
+- Compiler: GCC 9 or newer
 
 ## Test Results
 
@@ -72,19 +78,15 @@ One boundary run with `BLOCK_SIZE=256` was rejected by vLLM 0.10.2 before startu
 
 ## Representative Logs
 
-Remote log directory:
+The preserved validation bundle contains these provider-neutral log files:
 
-`/data/workspace/kvcached-professor-logs`
-
-Key logs:
-
-- `/data/workspace/kvcached-professor-logs/h20-full-smoke-smallpool-20260723-045714.log`
-- `/data/workspace/kvcached-professor-logs/h20-stability-10req-20260723-050301.log`
-- `/data/workspace/kvcached-professor-logs/h20-longprompt-5req-20260723-050443.log`
-- `/data/workspace/kvcached-professor-logs/h20-kvcached-deeptransfer-3req-20260723-050641.log`
-- `/data/workspace/kvcached-professor-logs/h20-kvcached-20req-20260723-051333.log`
-- `/data/workspace/kvcached-professor-logs/h20-kvcached-block64-5req-20260723-051436.log`
-- `/data/workspace/kvcached-professor-logs/h20-kvcached-block32-3req-20260723-051615.log`
+- `h20-full-smoke-smallpool-20260723-045714.log`
+- `h20-stability-10req-20260723-050301.log`
+- `h20-longprompt-5req-20260723-050443.log`
+- `h20-kvcached-deeptransfer-3req-20260723-050641.log`
+- `h20-kvcached-20req-20260723-051333.log`
+- `h20-kvcached-block64-5req-20260723-051436.log`
+- `h20-kvcached-block32-3req-20260723-051615.log`
 
 Representative successful client outputs include:
 
@@ -103,15 +105,14 @@ I fixed the integration layer to apply `GPU_UTILIZATION` before deriving the per
 ## Reproduction Command Pattern
 
 ```bash
-ssh -p 36000 root@minkali-any4.devcloud.woa.com
-cd /data/workspace/kvcached
-. /data/workspace/kvcached-venv/bin/activate
-export PATH=/data/workspace/kvcached-compiler/bin:$PATH
-export CC=/data/workspace/kvcached-compiler/bin/x86_64-conda-linux-gnu-gcc
-export CXX=/data/workspace/kvcached-compiler/bin/x86_64-conda-linux-gnu-g++
-export CUDAHOSTCXX=/data/workspace/kvcached-compiler/bin/x86_64-conda-linux-gnu-g++
+git clone --branch zixuan/fix-gpu-utilization-sizing \
+  https://github.com/Lanoxia/kvcached.git
+cd kvcached
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
 
-LOG_DIR=/data/workspace/kvcached-professor-logs \
+LOG_DIR="$PWD/validation-logs" \
 INSTALL_VLLM=0 \
 INSTALL_EDITABLE=0 \
 RUN_UNIT_TESTS=0 \
@@ -122,3 +123,6 @@ NUM_REQUESTS=10 \
 MAX_TOKENS=8 \
 bash tools/run_vllm_nixl_pd_smoke.sh
 ```
+
+Set `INSTALL_VLLM=1` and `INSTALL_EDITABLE=1` on a fresh runner to install the
+public dependencies and local kvcached checkout before executing the smoke.
