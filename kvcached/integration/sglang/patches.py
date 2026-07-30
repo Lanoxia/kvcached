@@ -11,6 +11,7 @@ import types
 from typing import Any, Callable, List, Optional, Tuple, Union, cast
 
 from kvcached.integration.patch_base import BasePatch, enable_kvcached
+from kvcached.integration.sglang.compat import legacy_get_num_new_pages
 from kvcached.integration.version_utils import VersionAwarePatch, version_range
 from kvcached.utils import MAX_CACHED_TOKENS, get_kvcached_logger
 
@@ -153,7 +154,16 @@ class ElasticAllocatorPatch(VersionAwarePatch, BasePatch):
             alloc_extend_kernel = getattr(alloc_mod, "alloc_extend_kernel")
             alloc_decode_kernel = getattr(alloc_mod, "alloc_decode_kernel")
 
-            from sglang.srt.utils import get_num_new_pages, next_power_of_2
+            from sglang.srt.utils import next_power_of_2
+
+            try:
+                from sglang.srt.utils import get_num_new_pages
+            except ImportError:
+                get_num_new_pages = legacy_get_num_new_pages
+                self.logger.info(
+                    "SGLang does not export get_num_new_pages; using "
+                    "the kvcached compatibility implementation"
+                )
 
             class ElasticPagedTokenToKVPoolAllocator(
                 BaseTokenToKVPoolAllocator  # type: ignore[misc, valid-type]
