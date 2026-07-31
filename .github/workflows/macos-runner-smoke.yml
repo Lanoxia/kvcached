@@ -1,0 +1,51 @@
+name: Temporary macOS Runner Control Plane Smoke
+
+on:
+  push:
+    branches:
+      - zixuan/macos-runner-smoke
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-smoke:
+    name: Dispatch to temporary macOS ARM64 runner
+    runs-on: [self-hosted, macOS, ARM64, kvcached-smoke]
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify runner dispatch and checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Darwin"
+          test "$(uname -m)" = "arm64"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+          mkdir -p runner-smoke-artifacts
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=${GITHUB_SHA}"
+            echo "runner_name=${RUNNER_NAME}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "runner_arch=${RUNNER_ARCH}"
+            echo "hostname=$(hostname)"
+            echo "uname=$(uname -a)"
+            echo "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } | tee runner-smoke-artifacts/dispatch-evidence.txt
+
+      - name: Upload dispatch evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-runner-smoke-${{ github.run_id }}
+          path: runner-smoke-artifacts/
+          if-no-files-found: error
+          retention-days: 7
