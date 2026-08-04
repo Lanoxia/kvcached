@@ -171,6 +171,7 @@ kvcached is indexed on [DeepWiki](https://deepwiki.com/ovg-project/kvcached) for
 The documentation covers:
 - Core architecture and memory management system
 - Integration with vLLM and SGLang
+- [vLLM CPU KV offloading](docs/VLLM_CPU_OFFLOADING.md)
 - Multi-model serving and controller system
 - Deployment guides and configuration reference
 - Performance benchmarking and analysis

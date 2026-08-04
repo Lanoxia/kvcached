@@ -1764,13 +1764,15 @@ class KVConnectorMixinPatch(VersionAwarePatch, BasePatch):
             self.logger.debug("use_uniform_kv_cache already patched")
             return True
 
-        def _patched_use_uniform_kv_cache(attn_groups, cache_dtype):
+        def _patched_use_uniform_kv_cache(*args: Any, **kwargs: Any):
             if enable_kvcached():
                 # Force the _allocate_kv_cache_tensors path so kvcached's VMM
                 # patch intercepts GPU allocation instead of the cross-layer
                 # torch.zeros path used by allocate_uniform_kv_caches().
                 return False
-            return original_method(attn_groups, cache_dtype)
+            # vLLM 0.12 originally accepted (attn_groups, cache_dtype), while
+            # newer releases only accept attn_groups. Preserve either API.
+            return original_method(*args, **kwargs)
 
         self._mark_as_patched(_patched_use_uniform_kv_cache, "use_uniform_kv_cache")
         KVConnectorModelRunnerMixin.use_uniform_kv_cache = staticmethod(
