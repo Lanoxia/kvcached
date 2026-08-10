@@ -109,6 +109,7 @@ Every profile except `nixl` runs it first.
 | `vllm` | 1 | a kvcached-backed vLLM correctness request, then the vLLM elasticity check |
 | `sglang` | 1 | the same two against SGLang |
 | `engines` | 1 | both engines' smoke and elasticity checks, sequentially |
+| `compat` | 1 | the manually selected model, engine, and layout compatibility cells |
 | `nixl` | 2 | the vLLM + NIXL prefill/decode disaggregation smoke test |
 | `all` | 2 | everything above |
 
@@ -120,6 +121,26 @@ the limit through the same path `kvctl` uses, and finally re-runs a greedy probe
 to confirm the output is unchanged.
 
 Logs are uploaded as a workflow artifact even when the run fails.
+
+## Model compatibility matrix
+
+The separate **Model Compatibility Matrix** workflow is manual-only because a
+full run starts 20 engine/model/layout combinations. It runs the cells
+sequentially on one selected GPU so the Hugging Face cache is reused and one
+failed cell does not prevent later cells from being measured.
+
+Inputs can select all cells or one engine, model architecture, and layout. When
+the default model is too large for the runner, select one architecture and set
+`model_override` to a smaller model ID from the same family. The model manifest
+is stored in `tools/model_compatibility_matrix.json`; Qwen3.5 automatically uses
+the required 4 MiB kvcached page size.
+
+Each cell starts the engine with kvcached, sends a deterministic short request,
+and records one of `pass`, `crash-at-startup`, or `garbled-output`. JSON,
+Markdown, server/client logs, and the runner environment are uploaded for 30
+days. By default the workflow reports all results without failing early. Enable
+`fail_on_non_pass` when using a selected set of expected-pass cells as a
+release gate.
 
 The runner script also:
 
