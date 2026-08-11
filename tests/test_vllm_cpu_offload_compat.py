@@ -8,7 +8,6 @@ import copy
 from pathlib import Path
 from typing import Any, Callable
 
-
 ROOT = Path(__file__).parents[1]
 PATCHES = ROOT / "kvcached/integration/vllm/patches.py"
 AUTOPATCH = ROOT / "kvcached/integration/vllm/autopatch.py"

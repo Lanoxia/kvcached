@@ -19,8 +19,8 @@ from kvcached.integration.vllm.patches import (
     GPUWorkerPatch,
     KVCacheCoordinatorPatch,
     KVCacheManagerPatch,
-    TritonAttentionPatch,
     KVConnectorMixinPatch,
+    TritonAttentionPatch,
 )
 from kvcached.utils import get_kvcached_logger
 
