@@ -65,3 +65,15 @@ def test_cpu_offload_patch_is_registered_for_vllm_012_and_newer():
 
     assert "KVConnectorMixinPatch" in source
     assert "(KVConnectorMixinPatch(), VLLM_V12_RANGE)" in source
+
+
+def test_gpu_smoke_requires_real_offload_and_baseline_equality():
+    script = (ROOT / "tools" / "run_vllm_cpu_offload_smoke.sh").read_text()
+
+    assert "vllm:kv_offload_store_bytes" in script
+    assert "vllm:kv_offload_load_bytes" in script
+    assert "CPU-offload output differs from the no-kvcached baseline" in script
+    assert "Successfully patched vllm:.*kv_connector_mixin" in script
+    assert "metrics-before-replay.prom" in script
+    assert "metrics-after-replay.prom" in script
+    assert "MANIFEST.sha256" in script
