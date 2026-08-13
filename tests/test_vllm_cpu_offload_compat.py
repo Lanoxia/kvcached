@@ -76,7 +76,8 @@ def test_gpu_smoke_requires_real_offload_and_baseline_equality():
     assert "Successfully patched vllm:.*kv_connector_mixin" in script
     assert 'extra_config["num_cpu_blocks"]' in script
     assert 'extra_config["cpu_bytes_to_use"]' in script
-    assert 'Version(version("vllm")) >= Version("0.12.0")' in script
+    assert "inspect.getsource(CPUOffloadingSpec.__init__)" in script
+    assert 'if "cpu_bytes_to_use" in spec_source' in script
     assert "metrics-before-replay.prom" in script
     assert "metrics-after-replay.prom" in script
     assert "MANIFEST.sha256" in script

@@ -108,18 +108,18 @@ fi
 
 KV_TRANSFER_CONFIG="$(python - "${CPU_BYTES_TO_USE}" "${CPU_BLOCKS}" \
   "${OFFLOAD_BLOCK_SIZE}" <<'PY'
-from importlib.metadata import version
+import inspect
 import json
 import sys
 
-from packaging.version import Version
+from vllm.v1.kv_offload.cpu import CPUOffloadingSpec
 
-vllm_version = Version(version("vllm"))
 extra_config = {"block_size": int(sys.argv[3])}
-if vllm_version < Version("0.12.0"):
-    extra_config["num_cpu_blocks"] = int(sys.argv[2])
-else:
+spec_source = inspect.getsource(CPUOffloadingSpec.__init__)
+if "cpu_bytes_to_use" in spec_source:
     extra_config["cpu_bytes_to_use"] = int(sys.argv[1])
+else:
+    extra_config["num_cpu_blocks"] = int(sys.argv[2])
 
 print(json.dumps({
     "kv_connector": "OffloadingConnector",
