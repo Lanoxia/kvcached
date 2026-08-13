@@ -15,6 +15,7 @@ MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8100}"
 CPU_BYTES_TO_USE="${CPU_BYTES_TO_USE:-4294967296}"
+CPU_BLOCKS="${CPU_BLOCKS:-2048}"
 OFFLOAD_BLOCK_SIZE="${OFFLOAD_BLOCK_SIZE:-64}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.35}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-1024}"
@@ -105,17 +106,25 @@ if [[ "${INSTALL_EDITABLE}" == "1" ]]; then
   python -m pip install -e .
 fi
 
-KV_TRANSFER_CONFIG="$(python - "${CPU_BYTES_TO_USE}" "${OFFLOAD_BLOCK_SIZE}" <<'PY'
+KV_TRANSFER_CONFIG="$(python - "${CPU_BYTES_TO_USE}" "${CPU_BLOCKS}" \
+  "${OFFLOAD_BLOCK_SIZE}" <<'PY'
+from importlib.metadata import version
 import json
 import sys
+
+from packaging.version import Version
+
+vllm_version = Version(version("vllm"))
+extra_config = {"block_size": int(sys.argv[3])}
+if vllm_version < Version("0.12.0"):
+    extra_config["num_cpu_blocks"] = int(sys.argv[2])
+else:
+    extra_config["cpu_bytes_to_use"] = int(sys.argv[1])
 
 print(json.dumps({
     "kv_connector": "OffloadingConnector",
     "kv_role": "kv_both",
-    "kv_connector_extra_config": {
-        "cpu_bytes_to_use": int(sys.argv[1]),
-        "block_size": int(sys.argv[2]),
-    },
+    "kv_connector_extra_config": extra_config,
 }))
 PY
 )"
@@ -155,8 +164,19 @@ until curl -fsS "http://${HOST}:${PORT}/v1/models" >/dev/null 2>&1; do
   sleep 2
 done
 
-grep -q "Successfully patched vllm:.*kv_connector_mixin" "${SERVER_LOG}" \
-  || die "vLLM became ready without the kvcached CPU-offload compatibility patch"
+if python - <<'PY'
+from importlib.metadata import version
+
+from packaging.version import Version
+
+raise SystemExit(0 if Version(version("vllm")) >= Version("0.12.0") else 1)
+PY
+then
+  grep -q "Successfully patched vllm:.*kv_connector_mixin" "${SERVER_LOG}" \
+    || die "vLLM became ready without the kvcached CPU-offload compatibility patch"
+else
+  log "vLLM predates the cross-layer allocation path; no mixin patch is required"
+fi
 
 python - "${HOST}" "${PORT}" "${MODEL}" "${EVICTION_REQUESTS}" \
   "${RESULT_JSON}" "${LOG_DIR}" "${BASELINE_URL}" <<'PY'
