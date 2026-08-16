@@ -120,6 +120,12 @@ def test_the_server_is_launched_against_the_installed_kvcached():
     assert "export PYTHONSAFEPATH=1" in source
 
 
+def test_sglang_smoke_disables_piecewise_cuda_graphs():
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert "--disable-piecewise-cuda-graph" in source
+
+
 def test_layout_preflight_and_validation(tmp_path):
     completed = run_preflight(tmp_path, "vllm", layout="non-contiguous")
     assert completed.returncode == 0
